@@ -1,81 +1,65 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { BrainCircuit, Play, TrendingDown, TrendingUp } from "lucide-react";
-import { Prediction } from "./Dashboard";
+import { BrainCircuit, Play, TrendingDown, TrendingUp, Cpu } from "lucide-react";
+import { BotState } from "@/lib/useTradingBot";
 import { cn } from "@/lib/utils";
 
 interface Props {
-    onPredict: (prediction: Prediction) => void;
-    currentPrice: number | null;
+    botState: BotState;
     pendingCount: number;
 }
 
-export default function PredictionModule({ onPredict, currentPrice, pendingCount }: Props) {
-    const [isPredicting, setIsPredicting] = useState(false);
-    const [nextPrediction, setNextPrediction] = useState<Prediction | null>(null);
-    const [confidence, setConfidence] = useState(0);
-
-    // Auto-predicting effect
-    useEffect(() => {
-        if (!currentPrice) return;
-
-        // Simple mock model: Predicts randomly every 10 seconds
-        const interval = setInterval(() => {
-            setIsPredicting(true);
-
-            setTimeout(() => {
-                const rand = Math.random();
-                const predictedMove: Prediction = rand > 0.5 ? "UP" : "DOWN";
-                const estimatedConfidence = Math.floor(Math.random() * 30 + 60); // 60-90%
-
-                setNextPrediction(predictedMove);
-                setConfidence(estimatedConfidence);
-
-                onPredict(predictedMove);
-                setIsPredicting(false);
-            }, 1500); // UI delay for "Thinking"
-        }, 10000);
-
-        return () => clearInterval(interval);
-    }, [currentPrice, onPredict]);
+export default function PredictionModule({ botState, pendingCount }: Props) {
+    const { isReady, signal, confidence, currentRsi, reason } = botState;
 
     return (
         <div className="p-6 rounded-2xl bg-charcoal-light/30 border border-glass-border flex flex-col gap-4 relative overflow-hidden">
-            {/* Background glow */}
+            {/* Background glow based on active signal */}
             <div className={cn(
                 "absolute -top-20 -right-20 w-40 h-40 rounded-full blur-3xl opacity-20 transition-colors duration-1000",
-                nextPrediction === "UP" ? "bg-neon-green" : nextPrediction === "DOWN" ? "bg-neon-red" : "bg-blue-500"
+                !isReady ? "bg-blue-500" : signal === "UP" ? "bg-neon-green" : signal === "DOWN" ? "bg-neon-red" : "bg-white/10"
             )} />
 
-            <div className="flex items-center justify-between z-10">
+            <div className="flex items-center justify-between z-10 w-full flex-wrap gap-2">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-glass-bg rounded-full border border-glass-border">
-                        <BrainCircuit className={cn("w-5 h-5", isPredicting ? "text-blue-400 animate-pulse" : "text-foreground/70")} />
+                        <BrainCircuit className={cn("w-5 h-5", !isReady ? "text-blue-400 animate-pulse" : "text-foreground/70")} />
                     </div>
                     <div>
-                        <h2 className="font-semibold tracking-wide text-sm">AI PREDICTION MODEL</h2>
-                        <p className="text-xs text-foreground/50">Status: {isPredicting ? "Analyzing Market Data..." : pendingCount > 0 ? "Awaiting Resolution..." : "Idle"}</p>
+                        <h2 className="font-semibold tracking-wide text-sm">ALGORITHMIC TRADING BOT</h2>
+                        <p className="text-xs text-foreground/50">Status: {!isReady ? "Bootstraping History..." : pendingCount > 0 ? "Awaiting Trade Resolution..." : "Scanning Market"}</p>
                     </div>
                 </div>
 
                 <div className={cn(
-                    "px-3 py-1 rounded-full text-xs font-bold border",
-                    isPredicting ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-glass-bg text-foreground/50 border-glass-border"
+                    "px-3 py-1 rounded-full text-xs font-bold border transition-colors duration-300",
+                    !isReady ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+                        signal !== "HOLD" ? "bg-purple-500/20 text-purple-400 border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.2)]" :
+                            "bg-glass-bg text-foreground/50 border-glass-border"
                 )}>
-                    {isPredicting ? "PROCESSING" : "ACTIVE"}
+                    {!isReady ? "INITIALIZING" : signal !== "HOLD" ? "SIGNAL FIRED" : "ACTIVE"}
                 </div>
             </div>
 
-            <div className="flex flex-col items-center justify-center p-6 bg-black/20 rounded-xl border border-white/5 relative z-10 min-h-[140px]">
-                {nextPrediction ? (
+            {/* Live Indicator Telemetry */}
+            {isReady && currentRsi !== null && (
+                <div className="flex items-center justify-between text-xs px-3 py-2 bg-black/40 border border-white/5 rounded-lg z-10 font-mono text-foreground/60 w-full mb-1">
+                    <div className="flex items-center gap-2">
+                        <Cpu className="w-3 h-3 text-blue-400" /> RSI (14m): {currentRsi.toFixed(2)}
+                    </div>
+                    <div className="truncate max-w-[200px] text-right" title={reason}>{reason}</div>
+                </div>
+            )}
+
+            <div className="flex flex-col items-center justify-center p-6 bg-black/20 rounded-xl border border-white/5 relative z-10 min-h-[140px] transition-all">
+                {isReady && signal !== "HOLD" ? (
                     <div className="flex flex-col flex-1 items-center justify-center gap-2 animate-in fade-in zoom-in duration-500">
-                        <div className="text-xs text-foreground/40 font-mono tracking-widest uppercase">Next Move Predicted</div>
+                        <div className="text-xs text-foreground/40 font-mono tracking-widest uppercase">Target Detected</div>
                         <div className={cn(
-                            "text-4xl font-black tracking-widest flex items-center gap-2",
-                            nextPrediction === "UP" ? "text-neon-green drop-shadow-[0_0_10px_rgba(57,255,20,0.3)]" : "text-neon-red drop-shadow-[0_0_10px_rgba(255,0,60,0.3)]"
+                            "text-4xl sm:text-5xl font-black tracking-widest flex items-center gap-2",
+                            signal === "UP" ? "text-neon-green drop-shadow-[0_0_10px_rgba(57,255,20,0.3)]" : "text-neon-red drop-shadow-[0_0_10px_rgba(255,0,60,0.3)]"
                         )}>
-                            {nextPrediction} {nextPrediction === "UP" ? <TrendingUp className="w-8 h-8" /> : <TrendingDown className="w-8 h-8" />}
+                            {signal} {signal === "UP" ? <TrendingUp className="w-8 h-8" /> : <TrendingDown className="w-8 h-8" />}
                         </div>
                         <div className="text-sm font-mono mt-2 flex gap-4">
                             <span className="text-foreground/60">CONFIDENCE: <span className="text-foreground">{confidence}%</span></span>
@@ -83,8 +67,14 @@ export default function PredictionModule({ onPredict, currentPrice, pendingCount
                     </div>
                 ) : (
                     <div className="flex flex-col items-center justify-center text-foreground/30 gap-2">
-                        <Play className="w-8 h-8 opacity-50" />
-                        <span className="text-sm">Awaiting first data point...</span>
+                        {!isReady ? (
+                            <Play className="w-8 h-8 opacity-50 animate-pulse" />
+                        ) : (
+                            <BrainCircuit className="w-8 h-8 opacity-50" />
+                        )}
+                        <span className="text-sm">
+                            {!isReady ? "Fetching historical K-lines..." : "HOLD: Waiting for strong indicator signal..."}
+                        </span>
                     </div>
                 )}
             </div>

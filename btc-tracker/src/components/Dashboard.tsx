@@ -5,6 +5,7 @@ import PriceTicker from "./PriceTicker";
 import PredictionModule from "./PredictionModule";
 import AccuracyGauge from "./AccuracyGauge";
 import HistoryList from "./HistoryList";
+import { useTradingBot, BotState } from "@/lib/useTradingBot";
 
 export type Prediction = "UP" | "DOWN";
 export type ResultStatus = "PENDING" | "WIN" | "LOSS";
@@ -29,6 +30,9 @@ export default function Dashboard() {
     // WebSocket Connection
     const wsRef = useRef<WebSocket | null>(null);
 
+    // Initialize Bot
+    const botState = useTradingBot(currentPrice);
+
     useEffect(() => {
         wsRef.current = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@trade");
         wsRef.current.onopen = () => setIsConnected(true);
@@ -45,6 +49,18 @@ export default function Dashboard() {
         wsRef.current.onclose = () => setIsConnected(false);
         return () => wsRef.current?.close();
     }, []);
+
+    // Effect to observe Bot Signals and register active predictions
+    useEffect(() => {
+        if (!botState.isReady || botState.signal === "HOLD" || !currentPrice) return;
+
+        // Check if there is already an active/pending prediction to avoid spam
+        const hasActivePrediction = history.some(h => h.status === "PENDING" && h.prediction === botState.signal);
+
+        if (!hasActivePrediction) {
+            handleMakePrediction(botState.signal);
+        }
+    }, [botState.signal, botState.isReady, currentPrice]);
 
     // Evaluation Logic
     // When price updates, check pending predictions and resolve them based on reality
@@ -113,7 +129,7 @@ export default function Dashboard() {
             </header>
 
             <div className="flex flex-col gap-4">
-                <PredictionModule onPredict={handleMakePrediction} currentPrice={currentPrice} pendingCount={history.filter(h => h.status === "PENDING").length} />
+                <PredictionModule botState={botState} pendingCount={history.filter(h => h.status === "PENDING").length} />
 
                 <AccuracyGauge score={score} history={history} />
 
